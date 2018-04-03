@@ -14,14 +14,14 @@ private:
 public:
   UnionFind(const size_type size) : tree(size, std::make_pair(1, 1)) {}
   size_type find(const size_type x) {
-    assert(x < tree.size());
+    assert(x < size());
     if (tree[x].first)
       return x;
     return tree[x].second = find(tree[x].second);
   }
   bool unite(size_type x, size_type y) {
-    assert(x < tree.size());
-    assert(y < tree.size());
+    assert(x < size());
+    assert(y < size());
     x = find(x);
     y = find(y);
     if (x == y)
@@ -33,19 +33,21 @@ public:
     return true;
   }
   bool same(const size_type x, const size_type y) {
-    assert(x < tree.size());
-    assert(y < tree.size());
+    assert(x < size());
+    assert(y < size());
     return find(x) == find(y);
   }
   size_type size(const size_type x) {
-    assert(x < tree.size());
+    assert(x < size());
     return tree[find(x)].second;
   }
+  size_type size() const noexcept { return tree.size(); }
+  bool empty() const noexcept { return tree.empty(); }
 };
 
 /*
 
-verify:https://beta.atcoder.jp/contests/atc001/submissions/2280596
+verify:https://beta.atcoder.jp/contests/atc001/submissions/2298373
 
 class UnionFind;
 
@@ -79,6 +81,14 @@ UnionFindは素集合を管理するデータ構造です
 -size (size_type x)->size_type
  x の含まれる集合に含まれる要素数を返します
  時間計算量 償却 O(α(N))
+
+-size ()->size_type
+ 全体の要素数を返します
+ 時間計算量 O(1)
+
+-empty ()->bool
+ 全体の集合が空であるかを真偽値で返します
+ 時間計算量 O(1)
 
 
 ※N:全体の要素数

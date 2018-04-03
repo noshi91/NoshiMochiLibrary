@@ -2,6 +2,7 @@
 #include <cassert>
 #include <cstdint>
 #include <limits>
+#include <utility>
 #include <vector>
 
 class PartiallyPersistentUnionFind {
@@ -20,14 +21,14 @@ public:
                       1, std::make_pair(0, 1))),
         global_count(0) {}
   size_type find(const size_type ver, size_type x) const {
-    assert(x < tree.size());
+    assert(x < size());
     while (tree[x].second <= ver)
       x = tree[x].first;
     return x;
   }
   bool unite(size_type x, size_type y) {
-    assert(x < tree.size());
-    assert(y < tree.size());
+    assert(x < size());
+    assert(y < size());
     ++global_count;
     x = find(global_count, x);
     y = find(global_count, y);
@@ -41,12 +42,12 @@ public:
     return true;
   }
   bool same(const size_type ver, const size_type x, const size_type y) const {
-    assert(x < tree.size());
-    assert(y < tree.size());
+    assert(x < size());
+    assert(y < size());
     return find(ver, x) == find(ver, y);
   }
   size_type size(const size_type ver, size_type x) const {
-    assert(x < tree.size());
+    assert(x < size());
     x = find(ver, x);
     return (std::lower_bound(
                 siz[x].begin(), siz[x].end(),
@@ -54,12 +55,14 @@ public:
             1)
         ->second;
   }
-  size_type count() const { return global_count; }
+  size_type count() const noexcept { return global_count; }
+  size_type size() const noexcept { return tree.size(); }
+  bool empty() const noexcept { return tree.empty(); }
 };
 
 /*
 
-verify:https://beta.atcoder.jp/contests/code-thanks-festival-2017/submissions/2280610
+verify:https://beta.atcoder.jp/contests/code-thanks-festival-2017/submissions/2298433
 
 class PartiallyPersistentUnionFind;
 
@@ -70,6 +73,7 @@ PartiallyPersistentUnionFindは素集合を管理する部分永続的データ�
 メンバ型
 -size_type
  符号なし整数型 (std::uint_fast32_t)
+
 
 メンバ関数
 -(constructor) (size_type size)
@@ -98,7 +102,15 @@ PartiallyPersistentUnionFindは素集合を管理する部分永続的データ�
  現在の操作回数を返します
  時間計算量 O(1)
 
+-size ()->size_type
+ 全体の要素数を返します
+ 時間計算量 O(1)
 
+-empty ()->bool
+ 全体の集合が空であるかどうかを真偽値で返します
+ 時間計算量 O(1)
+
+ 
 ※N:全体の要素数
 
 */

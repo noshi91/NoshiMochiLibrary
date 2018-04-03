@@ -1,64 +1,63 @@
 #include <cassert>
-#include <cstdint>
 #include <functional>
 #include <vector>
 
-template <typename CommutativeMonoid> class FenwickTree {
+template <typename CommutativeMonoid,
+          class Container = std::vector<CommutativeMonoid>>
+class FenwickTree {
 
 public:
-  using value_type = CommutativeMonoid;
-  using reference = value_type &;
-  using const_reference = const value_type &;
-  using size_type = std::uint_fast32_t;
+  using value_type = typename Container::value_type;
+  using reference = typename Container::reference;
+  using const_reference = typename Container::const_reference;
+  using size_type = typename Container::size_type;
+  using container_type = Container;
 
 private:
-  using F = std::function<value_type(const_reference, const_reference)>;
-  const value_type neutral_;
-  const F f;
-  const size_type size_;
-  std::vector<value_type> tree;
-  static size_type getsize(const size_type size) {
+  const size_type size_, capacity;
+  container_type tree;
+  static size_type getsize(const size_type siz) noexcept {
     size_type ret = 1;
-    while (ret < size)
+    while (ret < siz)
       ret <<= 1;
     return ret;
   }
 
 public:
-  FenwickTree(const size_type size, const_reference neutral = value_type(),
-              const F &f = std::plus<value_type>())
-      : neutral_(neutral), f(f), size_(getsize(size)),
-        tree(size_ + 1, neutral_) {}
+  explicit FenwickTree(const size_type size)
+      : size_(size), capacity(getsize(size_)), tree(capacity + 1) {}
   void update(size_type index, const_reference diff) {
-    assert(index < size_);
-    for (++index; index <= size_; index += index & ~index + 1)
-      tree[index] = f(tree[index], diff);
+    assert(index < size());
+    for (++index; index <= capacity; index += index & ~index + 1)
+      tree[index] = tree[index] + diff;
   }
   value_type range(size_type end) const {
-    assert(end <= size_);
-    value_type ret = neutral_;
-    do
-      ret = f(tree[end], ret);
-    while (end &= end - 1);
+    assert(end <= size());
+    value_type ret;
+    for (; end; end &= end - 1)
+      ret = tree[end] + ret;
     return ret;
   }
   size_type search(const std::function<bool(const_reference)> &b) const {
-    if (!b(tree[size_]))
+    if (!b(tree.back()))
       return size_;
-    size_type i = 0, k = size_;
-    value_type acc = neutral_;
+    size_type i = 0, k = capacity;
+    value_type acc;
     while (k >>= 1)
-      if (!b(f(acc, tree[i + k])))
-        acc = f(acc, tree[i += k]);
+      if (!b(acc + tree[i + k]))
+        acc = acc + tree[i += k];
     return i;
   }
+  size_type size() const noexcept { return size_; }
+  bool empty() const noexcept { return !size_; }
 };
 
 /*
 
-verify:https://beta.atcoder.jp/contests/arc033/submissions/2279714
+verify:https://beta.atcoder.jp/contests/arc033/submissions/2298393
 
-template<typename CommutativeMonoid>
+template<typename CommutativeMonoid,
+         class Container = std::vector<CommutativeMonoid>>
 class FenwickTree;
 
 FenwickTreeは可換モノイドの区間和を高速に計算するデータ構造です
@@ -72,26 +71,32 @@ FenwickTreeは可換モノイドの区間和を高速に計算するデータ構
  単位元 ∃e [∀a [e + a = a]]
  以上の条件を満たす代数的構造 (可換モノイド)
 
+ -加法   :operator+(2項)
+ -単位元 :デフォルトコンストラクタ
+  以上のように定義されている必要があります
+
+-class Container
+ 内部で使用するコンテナ型
+ デフォルトでは std::vector<CommutativeMonoid> が使用されます
+
 
 メンバ型
 -value_type
- 要素の型 (CommutativeMonoid)
+ 要素の型 (Container::value_type)
 
 -reference
- 要素(value_type)への参照型 (value_type &)
+ 要素(value_type)への参照型 (Container::reference)
 
 -const_reference
- 要素(value_type)へのconst参照型 (const value_type &)
+ 要素(value_type)へのconst参照型 (Container::const_reference)
 
 -size_type
- 符号なし整数型 (std::uint_fast32_t)
+ 符号なし整数型 (Container::size_type)
 
 
 メンバ関数
--(constructor) (size_type size, const_reference neutral = value_type(),
-                std::function<value_type(const_reference, const_reference)>
-                f =std::plus<value_type>())
- 大きさを size、単位元を neutral、演算を f として FenwickTree を構築します
+-(constructor) (size_type size)
+ size 個の要素からなる FenwickTree を構築します
  各要素は単位元で初期化されます
  時間計算量 O(N)
 
@@ -111,8 +116,16 @@ FenwickTreeは可換モノイドの区間和を高速に計算するデータ構
  b(range(i+1 ~ N)) が true  である必要があります
  時間計算量 O(logN)
 
+-size ()->size_type
+ 要素数を返します
+ 時間計算量 O(1)
+
+-empty ()->bool
+ size()==0 と等価です
+ 時間計算量 O(1)
+
 
 ※N:全体の要素数
-※f()の時間計算量をO(1)と仮定
+※operator+の時間計算量をO(1)と仮定
 
 */
