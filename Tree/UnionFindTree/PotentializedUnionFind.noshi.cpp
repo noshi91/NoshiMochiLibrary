@@ -75,10 +75,10 @@ PotentializedUnionFindはポテンシャルが付いた要素からなる素集�
 
 テンプレートパラメータ
 -typename Abelian
- 結合律 a + (b + c) = (a + b) + c
- 交換律 a + b = b + a
- 単位元 ∃e [∀a [e + a = a + e = a]]
- 逆元　 ∀a [∃-a [a + (-a) = e]]
+ 結合律 ∀a, ∀b, ∀c, a + (b + c) = (a + b) + c
+ 交換律 ∀a, ∀b, a + b = b + a
+ 単位元 ∃e, ∀a, e + a = a + e = a
+ 逆元　 ∀a, ∃-a, a + (-a) = e
  以上の条件を満たす代数的構造 (アーベル群)
 
  -加法   :operator+(2項)

@@ -3,7 +3,8 @@
 #include <utility>
 #include <vector>
 
-template <typename ValueMonoid, typename OperatorMonoid> class LazySegmentTree {
+template <typename ValueMonoid, typename OperatorMonoid, class Modify>
+class LazySegmentTree {
 public:
   using value_type = ValueMonoid;
   using reference = value_type &;
@@ -11,52 +12,44 @@ public:
   using operator_type = OperatorMonoid;
 
 private:
-  using operator_constref = const operator_type &;
   using container_type = std::vector<std::pair<value_type, operator_type>>;
 
 public:
   using size_type = typename container_type::size_type;
 
 private:
-  using F = std::function<value_type(const_reference, const_reference)>;
-  using G = std::function<operator_type(operator_constref, operator_constref)>;
-  using H = std::function<value_type(const_reference, operator_constref)>;
-  const F f;
-  const G g;
-  const H h;
-  const value_type v_neutral;
-  const operator_type o_neutral;
-  size_type height, size_;
+  const Modify m;
+  const size_type size_, height, capacity;
   container_type tree;
-  static size_type getheight(const size_type size) {
+  static size_type getheight(const size_type &size) noexcept {
     size_type ret = 0;
-    while ((size_type)1 << ret < size)
+    while (static_cast<size_type>(1) << ret < size)
       ++ret;
     return ret;
   }
-  value_type reflect(const size_type index) {
-    return h(tree[index].first, tree[index].second);
+  value_type reflect(const size_type &index) {
+    return m(tree[index].first, tree[index].second);
   }
-  void recalc(const size_type index) {
-    tree[index].first = f(reflect(index << 1), reflect(index << 1 | 1));
+  void recalc(const size_type &index) {
+    tree[index].first = reflect(index << 1) + reflect(index << 1 | 1);
   }
-  void assign(const size_type index, operator_constref data) {
-    tree[index].second = g(tree[index].second, data);
+  void assign(const size_type &index, const operator_type &data) {
+    tree[index].second = tree[index].second + data;
   }
-  void push(const size_type index) {
+  void push(const size_type &index) {
     assign(index << 1, tree[index].second);
     assign(index << 1 | 1, tree[index].second);
-    tree[index].second = o_neutral;
+    tree[index].second = operator_type();
   }
-  void propagate(const size_type index) {
+  void propagate(const size_type &index) {
     for (size_type i = height; i; --i)
       push(index >> i);
   }
-  void thrust(const size_type index) {
+  void thrust(const size_type &index) {
     tree[index].first = reflect(index);
     push(index);
   }
-  void evaluate(const size_type index) {
+  void evaluate(const size_type &index) {
     for (size_type i = height; i; --i)
       thrust(index >> i);
   }
@@ -66,23 +59,15 @@ private:
   }
 
 public:
-  LazySegmentTree(
-      const size_type size, const F &value_addition = std::plus<value_type>(),
-      const_reference value_neutral = value_type(),
-      const G &operator_multiplication = std::multiplies<operator_type>(),
-      operator_constref operator_neutral = operator_type(),
-      const H &mutual_multiplication =
-          [](const_reference l, operator_constref r) { return l * r; })
-      : f(value_addition), v_neutral(value_neutral), g(operator_multiplication),
-        o_neutral(operator_neutral), h(mutual_multiplication),
-        height(getheight(size)), size_((size_type)1 << height),
-        tree(size_ << 1, std::make_pair(v_neutral, o_neutral)) {}
-  void update(size_type begin, size_type end, operator_constref data) {
+  explicit LazySegmentTree(const size_type &size, const Modify &m = Modify())
+      : m(m), size_(size), height(getheight(size_)),
+        capacity(static_cast<size_type>(1) << height), tree(capacity << 1) {}
+  void update(size_type begin, size_type end, const operator_type &data) {
     assert(begin <= end);
-    assert(begin <= size_);
-    assert(end <= size_);
-    begin += size_;
-    end += size_;
+    assert(begin <= size());
+    assert(end <= size());
+    begin += capacity;
+    end += capacity;
     propagate(begin);
     propagate(end - 1);
     for (size_type left = begin, right = end; left < right;
@@ -96,63 +81,75 @@ public:
     build(end - 1);
   }
   void update(size_type index,
-              const std::function<value_type(const_reference)> &e) {
-    assert(index < size_);
-    index += size_;
+              const std::function<value_type(const_reference)> &f) {
+    assert(index < size());
+    index += capacity;
     propagate(index);
-    tree[index].first = e(reflect(index));
-    tree[index].second = o_neutral;
+    tree[index].first = f(reflect(index));
+    tree[index].second = operator_type();
     build(index);
   }
   void update(const size_type index, const_reference data) {
-    assert(index < size_);
+    assert(index < size());
     update(index, [&data](const_reference d) { return data; });
   }
   value_type range(size_type begin, size_type end) {
     assert(begin <= end);
-    assert(begin <= size_);
-    assert(end <= size_);
-    begin += size_;
-    end += size_;
+    assert(begin <= size());
+    assert(end <= size());
+    begin += capacity;
+    end += capacity;
     evaluate(begin);
     evaluate(end - 1);
-    value_type retL = v_neutral, retR = v_neutral;
+    value_type retL, retR;
     for (; begin < end; begin >>= 1, end >>= 1) {
       if (begin & 1)
-        retL = f(retL, reflect(begin++));
+        retL = retL + reflect(begin++);
       if (end & 1)
-        retR = f(reflect(end - 1), retR);
+        retR = reflect(end - 1) + retR;
     }
-    return f(retL, retR);
+    return retL + retR;
   }
   size_type search(const std::function<bool(const_reference)> &b) {
+    if (b(value_type()))
+      return 0;
     if (!b(reflect(1)))
-      return size_;
-    value_type acc = v_neutral;
+      return size() + 1;
+    value_type acc;
     size_type i = 1;
-    while (i < size_) {
+    while (i < capacity) {
       thrust(i);
-      if (!b(f(acc, reflect(i <<= 1))))
-        acc = f(acc, reflect(i++));
+      if (!b(acc + reflect(i <<= 1)))
+        acc = acc + reflect(i++);
     }
-    return i - size_;
+    return i - capacity + 1;
   }
-  const_reference operator[](const size_type index) {
-    assert(index < size_);
-    index += size_;
+  const_reference operator[](size_type index) {
+    assert(index < size());
+    index += capacity;
     evaluate(index);
     tree[index].first = reflect(index);
-    tree[index].second = o_neutral;
+    tree[index].second = operator_type();
     return tree[index].first;
   }
-  size_type size() const { return size_; }
+  size_type size() const noexcept { return size_; }
+  bool empty() const noexcept { return !size_; }
 };
+
+template <typename V, typename O, class F>
+LazySegmentTree<V, O, F>
+make_Lazy(const typename LazySegmentTree<V, O, F>::size_type &size,
+          const F &f) {
+  return LazySegmentTree<V, O, F>(size, f);
+}
 
 /*
 
-verify:http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2758255#1
+verify:http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2762794#1
+      :http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2762798#1
+      :http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2762820#1
 
-template<typename ValueMonoid, typename OperatorMonoid>
+template<typename ValueMonoid, typename OperatorMonoid, class Modify>
 class LazySegmentTree;
 
 LazySegmentTreeはモノイドの区間和と区間更新を高速に計算するデータ構造です
@@ -161,25 +158,37 @@ LazySegmentTreeはモノイドの区間和と区間更新を高速に計算す�
 
 テンプレートパラメータ
 -typename ValueMonoid
- 結合律 a + (b + c) = (a + b) + c
- 単位元 ∃e [∀a [e + a = a + e = a]]
+ 結合律 ∀a, ∀b, ∀c, a + (b + c) = (a + b) + c
+ 単位元 ∃e, ∀a, e + a = a + e = a
  以上の条件を満たす代数的構造 (モノイド)
+
+ -加法   :operator+(2項)
+ -単位元 :デフォルトコンストラクタ
+  以上のように定義されている必要があります
 
 -typename OperatorMonoid
- 結合律 a * (b * c) = (a * b) * c
- 単位元 ∃e [∀a [e * a = a * e = a]]
+ 結合律 ∀a, ∀b, ∀c, a + (b + c) = (a + b) + c
+ 単位元 ∃e, ∀a, e + a = a + e = a
  以上の条件を満たす代数的構造 (モノイド)
 
- また、以下の条件が成立する必要がある
- (ValueMonoid を V、OperatorMonoid を O と表記)
- 閉性 V * O -> V
- 単位元 ∃e∈O [∀a∈V [a * e = a]]
- 結合律 a * (b * c) = (a * b) * c (a∈V, b,c∈O)
- 分配法則 (a * c) + (b * c) = (a + b) * c (a,b∈V, c∈O)
+ -加法   :operator+(2項)
+ -単位元 :デフォルトコンストラクタ
+  以上のように定義されている必要があります
+
+-class Modify
+ ValueMonoid に OperatorMonoid を作用させた結果を返す、
+ operator() が定義されたクラスか関数ポインタ
+
+
+ また、以下の条件が成立する必要があります
+ (ValueMonoid を V、OperatorMonoid を O、Modifyを m と表記)
+ 閉性     ∀a∈V, ∀b∈O, m(a, b)∈V
+ 単位元   ∃e∈O, ∀a∈V, m(a, e) = a
+ 結合律   ∀a∈V, ∀b∈O, ∀c∈O, m(a, (b + c)) = m(m(a, b), c)
+ 分配法則 ∀a∈V, ∀b∈V, ∀c∈O, m(a, c) + m(b, c) = m((a + b), c)
 
 
 メンバ型
-
 -value_type
  要素の型 (ValueMonoid)
 
@@ -197,38 +206,21 @@ LazySegmentTreeはモノイドの区間和と区間更新を高速に計算す�
 
 
 メンバ関数
--(constructor) (size_type size,
-                std::function<value_type(const_reference, const_reference)>
-                value_addition=std::plus<value_type>(),
-                const_reference value_neutral = value_type(),
-                std::function<operator_type
-                (const operator_type &,const operator_type &)>
-                &operator_multiplication = std::multiplies<operator_type>(),
-                const operator_type &operator_neutral = operator_type(),
-                std::function<value_type
-                (const_reference, const operator_type &)>
-                mutual_multiplication
-                = [](const_reference l,const operator_type &r){ return l * r; })
- 要素数 :size
- value_type :演算 :value_addition
-            :単位元 :value_neutral
- operator_type :演算 :operator_multiplication
-               :単位元 :operator_neutral
- value_type, operator_type間の演算 :mutual_multiplication
- 上記の状態で LazySegmentTree を構築します
+-(constructor) (size_type size,Modify m = Modify())
+ 関数オブジェクトを受け取り、要素数 size の LazySegmentTree を構築します
  各要素は単位元で初期化されます
  時間計算量 O(N)
 
 -update (size_type begin, size_type end const operator_type &data)
- [begin, end) に data を乗じます
+ [begin, end) に data を作用させます
  時間計算量 O(logN)
 
--update (size_type index, std::function<value_type(const_reference)> g)
- index で指定した要素を g を適用した値で更新します
+-update (size_type index, std::function<value_type(const_reference)> f)
+ index で指定した要素を f を適用した値で更新します
  時間計算量 O(logN)
 
 -update (size_type index, const_reference data)
- index で指定した要素を data に変更します
+ index で指定した要素を data に更新します
  時間計算量 O(logN)
 
 -range (size_type begin, size_type end)->value_type
@@ -237,10 +229,10 @@ LazySegmentTreeはモノイドの区間和と区間更新を高速に計算す�
  時間計算量 O(logN)
 
 -search (std::function<bool(const_reference)> b)->size_type
- b(range(0, i + 1)) が true を返すような i のうち最小の値を返します
- そのような i が存在しない場合 N 以上の値を返します
- b(range(0, 1     ~ i)) が false かつ
- b(range(0, i + 1 ~ N)) が true  である必要があります
+ b(range(0, i - 1)) が false を返し、
+ b(range(0, i))     が true  を返すような i を返します
+ b(range(0, -1))         は false、
+ b(range(0, size() + 1)) は true と扱います
  時間計算量 O(logN)
 
 -operator[] (size_type index)->const_reference
@@ -248,8 +240,19 @@ LazySegmentTreeはモノイドの区間和と区間更新を高速に計算す�
  時間計算量 O(logN)
 
 -size ()->size_type
- 要素数を返します　(コンストラクタで与えた size より大きい可能性があります)
+ 要素数を返します
  時間計算量 O(1)
+
+-empty ()->bool
+ size()==0 と同値です
+ 時間計算量 O(1)
+
+
+非メンバ関数
+template<typename V, typename O, class F>
+-make_Lazy (size_type size, F f)->LazySegmentTree<V, O, F>
+ 関数オブジェクトを受け取り LazySegmentTree を構築するヘルパ関数
+
 
 ※N:全体の要素数
 ※f() の時間計算量を O(1) と仮定
