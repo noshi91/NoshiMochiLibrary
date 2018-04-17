@@ -180,25 +180,29 @@ IntervalHeapは両端優先度付きキュー(DEPQ)の一種であり、
 
 -push (const value_type &x)
  x を要素として追加します
- 時間計算量 償却O(logN) ※1
+ 時間計算量 O(logN) ※1
 
 -template<class... Args>
  emplace (Args&&... args)
  コンストラクタの引数から直接構築で要素を追加します
- 時間計算量 償却O(logN) ※1
+ 時間計算量 O(logN) ※1
 
 -pop_min ()
  最小値を削除します
- 時間計算量 償却O(logN) ※1
+ 時間計算量 O(logN) ※1
 
 -pop_max ()
  最大値を削除します
- 時間計算量 償却O(logN) ※1
+ 時間計算量 O(logN) ※1
 
 
 ※N:要素数
 ※比較の時間計算量を O(1) と仮定
-※1 償却計算量はコンテナクラスの push_back()/emplace_back()/pop_back()
-    に起因している
+※1 各関数内ではコンテナの以下の関数を呼び出している
+    push():push_back()
+    emplace():emplace_back()
+    pop_min()/pop_max():pop_back()
+    よって、これらが償却計算量の場合は計算量はそれに従う
+    基本的に、空間計算量が O(N) であればこれらは償却時間となる
 
 */
