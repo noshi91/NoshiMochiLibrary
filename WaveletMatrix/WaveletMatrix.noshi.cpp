@@ -82,6 +82,10 @@ public:
       std::copy(R.begin(), R.begin() + r, data.begin() + l);
     }
   }
+
+  size_type size() const noexcept { return size_; }
+  bool empty() const noexcept { return size() == 0; }
+
   value_type access(size_type index) const {
     assert(index < size());
     value_type ret = 0;
@@ -145,10 +149,28 @@ public:
         last -= x.rank(last);
       }
     }
-    return ret + last - first;
+    return ret;
   }
-  size_type more_than(size_type first, size_type last,
-                      const value_type data) const {
+  size_type at_least(size_type first, size_type last,
+                     const value_type data) const {
+    assert(first <= size());
+    assert(last <= size());
+    assert(first <= last);
+    size_type ret = 0;
+    for (const auto &x : matrix) {
+      if (data & x.bit) {
+        first = x.rank(first) + x.cnt;
+        last = x.rank(last) + x.cnt;
+      } else {
+        ret += x.rank(last) - x.rank(first);
+        first -= x.rank(first);
+        last -= x.rank(last);
+      }
+    }
+    return ret + (last - first);
+  }
+  size_type greater_than(size_type first, size_type last,
+                         const value_type data) const {
     assert(first <= size());
     assert(last <= size());
     assert(first <= last);
@@ -165,28 +187,46 @@ public:
     }
     return ret;
   }
+  size_type at_most(size_type first, size_type last,
+                    const value_type data) const {
+    assert(first <= size());
+    assert(last <= size());
+    assert(first <= last);
+    size_type ret = 0;
+    for (const auto &x : matrix) {
+      if (data & x.bit) {
+        ret += last - first + x.rank(first) - x.rank(last);
+        first = x.rank(first) + x.cnt;
+        last = x.rank(last) + x.cnt;
+      } else {
+        first -= x.rank(first);
+        last -= x.rank(last);
+      }
+    }
+    return ret + (last - first);
+  }
   size_type rangefreq(size_type first, size_type last, const value_type lower,
                       const value_type upper) const {
     assert(first <= size());
     assert(last <= size());
     assert(first <= last);
     assert(lower <= upper);
-    return less_than(first, last, upper) - less_than(first, last, lower);
+    return at_least(first, last, lower) - at_least(first, last, upper);
   }
   value_type successor(const size_type first, const size_type last,
                        const value_type data) const {
     assert(first <= size());
     assert(last <= size());
     assert(first <= last);
-    const size_type k = less_than(first, last, data);
-    return last - first == k ? NOT_FOUND : rquantile(first, last, k);
+    const size_type k = at_least(first, last, data);
+    return k ? quantile(first, last, k - 1) : NOT_FOUND;
   }
   value_type predecessor(const size_type first, const size_type last,
                          const value_type data) const {
     assert(first <= size());
     assert(last <= size());
     assert(first <= last);
-    const size_type k = more_than(first, last, data);
+    const size_type k = greater_than(first, last, data);
     return last - first == k ? NOT_FOUND : quantile(first, last, k);
   }
   value_type strict_succ(const size_type first, const size_type last,
@@ -194,7 +234,7 @@ public:
     assert(first <= size());
     assert(last <= size());
     assert(first <= last);
-    const size_type k = more_than(first, last, data);
+    const size_type k = greater_than(first, last, data);
     return k ? quantile(first, last, k - 1) : NOT_FOUND;
   }
   value_type strict_pred(const size_type first, const size_type last,
@@ -202,16 +242,14 @@ public:
     assert(first <= size());
     assert(last <= size());
     assert(first <= last);
-    const size_type k = less_than(first, last, data);
-    return k ? rquantile(first, last, k - 1) : NOT_FOUND;
+    const size_type k = at_least(first, last, data);
+    return last - first == k ? NOT_FOUND : quantile(first, last, k);
   }
-  size_type size() const noexcept { return size_; }
-  bool empty() const noexcept { return size() == 0; }
 };
 
 /*
 
-verify:http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2769260#1
+verify:http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2835080#1
 
 template<typename Integral,
          std::size_t bitsize = std::numeric_limits<Integral>::digits()>
@@ -244,6 +282,14 @@ WaveletMatrix は静的な非負整数列に対する区間クエリを処理す
  NOT_FOUND は幾つかのメンバ関数で値が存在しないことを示す返り値に使われます
  時間計算量 O(N*bitsize)
 
+-size ()->size_type
+ 要素数を返します
+ 時間計算量 O(1)
+
+-empty ()->bool
+ size()==0 と同値です
+ 時間計算量 O(1)
+
 -access (size_type index)->value_type
  index で指定した要素を返します
  時間計算量 O(loglogN*bitsize)
@@ -268,8 +314,16 @@ WaveletMatrix は静的な非負整数列に対する区間クエリを処理す
  [first, last) で data より小さい要素の数を返します
  時間計算量 O(loglogN*bitsize)
 
--more_than (size_type first, size_type last, value_type data)->size_type
+-at_least (size_type first, size_type last, value_type data)->size_type
+ [first, last) で data 以上の要素の数を返します
+ 時間計算量 O(loglogN*bitsize)
+
+-greater_than (size_type first, size_type last, value_type data)->size_type
  [first, last) で data より大きい要素の数を返します
+ 時間計算量 O(loglogN*bitsize)
+
+-at_most (size_type first, size_type last, value_type data)->size_type
+ [first, last) で data 以下の要素の数を返します
  時間計算量 O(loglogN*bitsize)
 
 -rangefreq (size_type first, size_type last,
@@ -293,17 +347,9 @@ WaveletMatrix は静的な非負整数列に対する区間クエリを処理す
  時間計算量 O(loglogN*bitsize)
 
 -strict_pred (size_type first, size_type last, value_type data)->value_type
- [first, last) で data 未満で最大の要素を返します
+ [first, last) で data より小さい最大の要素を返します
  存在しない場合 NOT_FOUND を返します
  時間計算量 O(loglogN*bitsize)
-
--size ()->size_type
- 要素数を返します
- 時間計算量 O(1)
-
--empty ()->bool
- size()==0 と同値です
- 時間計算量 O(1)
 
 
 ※N:全体の要素数
