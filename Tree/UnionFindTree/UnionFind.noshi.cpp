@@ -1,36 +1,29 @@
 #include <cassert>
-#include <cstdint>
+#include <cstddef>
 #include <utility>
 #include <vector>
 
 class UnionFind {
 
 public:
-  using size_type = std::uint_fast32_t;
+  using difference_type = std::ptrdiff_t;
+  using container_type = std::vector<difference_type>;
+  using size_type = typename container_type::size_type;
 
 private:
-  std::vector<std::pair<bool, size_type>> tree;
+  container_type c;
 
 public:
-  UnionFind(const size_type size) : tree(size, std::make_pair(1, 1)) {}
+  explicit UnionFind(const size_type size) : c(size, -1) {}
+
+  size_type size() const { return c.size(); }
+  bool empty() const { return c.empty(); }
+
   size_type find(const size_type x) {
     assert(x < size());
-    if (tree[x].first)
+    if (c[x] < static_cast<difference_type>(0))
       return x;
-    return tree[x].second = find(tree[x].second);
-  }
-  bool unite(size_type x, size_type y) {
-    assert(x < size());
-    assert(y < size());
-    x = find(x);
-    y = find(y);
-    if (x == y)
-      return false;
-    if (tree[x].second < tree[y].second)
-      std::swap(x, y);
-    tree[x].second += tree[y].second;
-    tree[y] = std::make_pair(0, x);
-    return true;
+    return c[x] = static_cast<difference_type>(find(c[x]));
   }
   bool same(const size_type x, const size_type y) {
     assert(x < size());
@@ -39,15 +32,28 @@ public:
   }
   size_type size(const size_type x) {
     assert(x < size());
-    return tree[find(x)].second;
+    return static_cast<size_type>(-c[find(x)]);
   }
-  size_type size() const noexcept { return tree.size(); }
-  bool empty() const noexcept { return tree.empty(); }
+
+  bool unite(size_type x, size_type y) {
+    assert(x < size());
+    assert(y < size());
+    x = find(x);
+    y = find(y);
+    if (x == y)
+      return false;
+    if (c[x] > c[y])
+      std::swap(x, y);
+    c[x] += c[y];
+    c[y] = static_cast<difference_type>(x);
+    return true;
+  }
 };
 
 /*
 
-verify:https://beta.atcoder.jp/contests/atc001/submissions/2298373
+verify:https://beta.atcoder.jp/contests/atc001/submissions/2481685
+      :http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2847507#1
 
 class UnionFind;
 
@@ -56,8 +62,15 @@ UnionFindは素集合を管理するデータ構造です
 
 
 メンバ型
+-difference_type
+ 符号あり整数型 (std::ptrdiff_t)
+ 内部実装で使用
+
+-container_type
+ 内部で使用するコンテナ型 (std::vector<difference_type>)
+
 -size_type
- 符号なし整数型 (std::uint_fast32_t)
+ 符号なし整数型 (container_type::size_type)
 
 
 メンバ関数
@@ -65,13 +78,16 @@ UnionFindは素集合を管理するデータ構造です
  独立した要素を size 個持つ状態で構築します
  時間計算量 O(N)
 
+-size ()->size_type
+ 全体の要素数を返します
+ 時間計算量 O(1)
+
+-empty ()->bool
+ 全体の集合が空であるかを真偽値で返します
+ 時間計算量 O(1)
+
 -find (size_type x)->size_type
  x の根を返します
- 時間計算量 償却 O(α(N))
-
--unite (size_type x, size_type y)->bool
- x と y がそれぞれ含まれる集合を併合します
- 併合に成功したか、すなわち x と y が違う集合に属していたかを真偽値で返します
  時間計算量 償却 O(α(N))
 
 -same (size_type x, size_type y)->bool
@@ -82,13 +98,10 @@ UnionFindは素集合を管理するデータ構造です
  x の含まれる集合に含まれる要素数を返します
  時間計算量 償却 O(α(N))
 
--size ()->size_type
- 全体の要素数を返します
- 時間計算量 O(1)
-
--empty ()->bool
- 全体の集合が空であるかを真偽値で返します
- 時間計算量 O(1)
+-unite (size_type x, size_type y)->bool
+ x と y がそれぞれ含まれる集合を併合します
+ 併合に成功したか、すなわち x と y が違う集合に属していたかを真偽値で返します
+ 時間計算量 償却 O(α(N))
 
 
 ※N:全体の要素数
