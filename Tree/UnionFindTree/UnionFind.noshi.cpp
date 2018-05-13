@@ -10,20 +10,24 @@ public:
   using container_type = std::vector<difference_type>;
   using size_type = typename container_type::size_type;
 
-private:
+protected:
   container_type c;
 
 public:
+  UnionFind() : c() {}
   explicit UnionFind(const size_type size) : c(size, -1) {}
 
   size_type size() const { return c.size(); }
   bool empty() const { return c.empty(); }
 
-  size_type find(const size_type x) {
+  size_type find(size_type x) {
     assert(x < size());
-    if (c[x] < static_cast<difference_type>(0))
-      return x;
-    return c[x] = static_cast<difference_type>(find(c[x]));
+    while (c[x] >= static_cast<difference_type>(0)) {
+      if (c[static_cast<size_type>(c[x])] >= static_cast<difference_type>(0))
+        c[x] = c[static_cast<size_type>(c[x])];
+      x = static_cast<size_type>(c[x]);
+    }
+    return x;
   }
   bool same(const size_type x, const size_type y) {
     assert(x < size());
@@ -52,8 +56,8 @@ public:
 
 /*
 
-verify:https://beta.atcoder.jp/contests/atc001/submissions/2481685
-      :http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2847507#1
+verify:https://beta.atcoder.jp/contests/atc001/submissions/2509045
+      :http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2860145#1
 
 class UnionFind;
 

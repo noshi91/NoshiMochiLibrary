@@ -1,53 +1,60 @@
 #include <cassert>
-#include <cstdint>
-#include <tuple>
+#include <cstddef>
+#include <utility>
 #include <vector>
 
-template <typename Abelian> class PotentializedUnionFind {
+template <class Abelian> class PotentializedUnionFind {
 
 public:
   using value_type = Abelian;
-  using reference = value_type &;
-  using const_reference = const value_type &;
-  using size_type = std::uint_fast32_t;
+  using difference_type = std::ptrdiff_t;
+  using container_type = std::vector<std::pair<difference_type, value_type>>;
+  using size_type = typename container_type::size_type;
+
+protected:
+  container_type c;
 
 private:
-  std::vector<std::tuple<bool, size_type, value_type>> tree;
-  value_type potential(const size_type x) {
-    find(x);
-    return std::get<2>(tree[x]);
+  value_type potential(size_type x) {
+    value_type ret = {};
+    while (c[x].first >= static_cast<difference_type>(0)) {
+      if (c[static_cast<size_type>(c[x].first)].first >=
+          static_cast<difference_type>(0)) {
+        c[x].second =
+            c[static_cast<size_type>(c[x].first)].second + c[x].second;
+        c[x].first = c[static_cast<size_type>(c[x].first)].first;
+      }
+      ret = ret + c[x].second;
+      x = static_cast<size_type>(c[x].first);
+    }
+    return std::move(ret);
   }
 
 public:
-  PotentializedUnionFind(const size_type size)
-      : tree(size, std::forward_as_tuple(1, 1, value_type())) {}
-  size_type find(const size_type x) {
+  PotentializedUnionFind() : c() {}
+  explicit PotentializedUnionFind(const size_type size)
+      : c(size, std::make_pair(-1, value_type())) {}
+
+  size_type size() const { return c.size(); }
+  bool empty() const { return c.empty(); }
+
+  size_type find(size_type x) {
     assert(x < size());
-    if (std::get<0>(tree[x]))
-      return x;
-    const size_type t = std::get<1>(tree[x]);
-    std::get<1>(tree[x]) = find(t);
-    std::get<2>(tree[x]) = std::get<2>(tree[t]) + std::get<2>(tree[x]);
-    return std::get<1>(tree[x]);
+    while (c[x].first >= static_cast<difference_type>(0)) {
+      if (c[static_cast<size_type>(c[x].first)].first >=
+          static_cast<difference_type>(0)) {
+        c[x].second =
+            c[static_cast<size_type>(c[x].first)].second + c[x].second;
+        c[x].first = c[static_cast<size_type>(c[x].first)].first;
+      }
+      x = static_cast<size_type>(c[x].first);
+    }
+    return x;
   }
   value_type diff(const size_type x, const size_type y) {
     assert(x < size());
     assert(y < size());
     return potential(y) + (-potential(x));
-  }
-  bool unite(size_type x, size_type y, value_type d) {
-    assert(x < size());
-    assert(y < size());
-    d = d + diff(y, x);
-    x = find(x);
-    y = find(y);
-    if (x == y)
-      return false;
-    if (std::get<1>(tree[x]) < std::get<1>(tree[y]))
-      std::swap(x, y), d = -d;
-    std::get<1>(tree[x]) += std::get<1>(tree[y]);
-    tree[y] = std::forward_as_tuple(0, x, d);
-    return true;
   }
   bool same(const size_type x, const size_type y) {
     assert(x < size());
@@ -56,17 +63,31 @@ public:
   }
   size_type size(const size_type x) {
     assert(x < size());
-    return std::get<1>(tree[find(x)]);
+    return static_cast<size_type>(-c[find(x)].first);
   }
-  size_type size() const noexcept { return tree.size(); }
-  bool empty() const noexcept { return tree.empty(); }
+
+  bool unite(size_type x, size_type y, value_type d) {
+    assert(x < size());
+    assert(y < size());
+    d = d + diff(y, x);
+    x = find(x);
+    y = find(y);
+    if (x == y)
+      return false;
+    if (c[x].first > c[y].first)
+      std::swap(x, y), d = -d;
+    c[x].first += c[y].first;
+    c[y] = std::make_pair(static_cast<difference_type &&>(x), std::move(d));
+    return true;
+  }
 };
 
 /*
 
-verify:https://beta.atcoder.jp/contests/abc087/submissions/2298400
+verify:https://beta.atcoder.jp/contests/abc087/submissions/2509195
+      :http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2860228#1
 
-template <typename Abelian>
+template <class Abelian>
 class PotentializedUnionFind;
 
 PotentializedUnionFindはポテンシャルが付いた要素からなる素集合を管理するデータ構造です
@@ -74,7 +95,7 @@ PotentializedUnionFindはポテンシャルが付いた要素からなる素集�
 
 
 テンプレートパラメータ
--typename Abelian
+-class Abelian
  結合律 ∀a, ∀b, ∀c, a + (b + c) = (a + b) + c
  交換律 ∀a, ∀b, a + b = b + a
  単位元 ∃e, ∀a, e + a = a + e = a
@@ -91,20 +112,29 @@ PotentializedUnionFindはポテンシャルが付いた要素からなる素集�
 -value_type
  要素の型 (Abelian)
 
--reference
- 要素(value_type)への参照型 (value_type &)
+-difference_type
+ 符号あり整数型 (std::ptrdiff_t)
+ 内部実装で使用
 
--const_reference
- 要素(value_type)へのconst参照型 (const value_type &)
+-container_type
+ 内部で使用するコンテナ型
 
 -size_type
- 符号なし整数型 (std::uint_fast32_t)
+ 符号なし整数型
 
 
 メンバ関数
 -(constructor) (size_type size)
  独立した要素を size 個持つ状態で構築します
  時間計算量 O(N)
+
+-size ()->size_type
+ 全体の要素数を返します
+ 時間計算量 O(1)
+
+-empty()->bool
+ 全体の集合が空であるかどうかを真偽値で返します
+ 時間計算量 O(1)
 
 -find (size_type x)->size_type
  x の根を返します
@@ -115,13 +145,6 @@ PotentializedUnionFindはポテンシャルが付いた要素からなる素集�
  x と y が異なる集合に属していた場合の動作は保証されません
  時間計算量 償却 O(α(N))
 
--unite (size_type x, size_type y, value_type d)->bool
- x と y がそれぞれ含まれる集合を x を基準とした y のポテンシャルが
- d となるように併合します
- x と y が既に同じ集合に属していた場合、ポテンシャルは変化しません
- 併合に成功したか、すなわち x と y が違う集合に属していたかを真偽値で返します
- 時間計算量 償却 O(α(N))
-
 -same (size_type x, size_type y)->bool
  x と y が同じ集合に属しているかを真偽値で返します
  時間計算量 償却 O(α(N))
@@ -130,13 +153,12 @@ PotentializedUnionFindはポテンシャルが付いた要素からなる素集�
  x の含まれる集合に含まれる要素数を返します
  時間計算量 償却 O(α(N))
 
--size ()->size_type
- 全体の要素数を返します
- 時間計算量 O(1)
-
--empty()->bool
- 全体の集合が空であるかどうかを真偽値で返します
- 時間計算量 O(1)
+-unite (size_type x, size_type y, value_type d)->bool
+ x と y がそれぞれ含まれる集合を x を基準とした y のポテンシャルが
+ d となるように併合します
+ x と y が既に同じ集合に属していた場合、ポテンシャルは変化しません
+ 併合に成功したか、すなわち x と y が違う集合に属していたかを真偽値で返します
+ 時間計算量 償却 O(α(N))
 
 
 ※N:全体の要素数
