@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstddef>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -7,25 +8,23 @@ template <class Abelian> class PotentializedUnionFind {
 
 public:
   using value_type = Abelian;
-  using difference_type = std::ptrdiff_t;
-  using container_type = std::vector<std::pair<difference_type, value_type>>;
-  using size_type = typename container_type::size_type;
+  using size_type = std::size_t;
+  using container_type =
+      std::vector<std::tuple<size_type, value_type, size_type>>;
 
 protected:
   container_type c;
 
 private:
+  size_type &par(const size_type i) { return std::get<0>(c[i]); }
+  value_type &val(const size_type i) { return std::get<1>(c[i]); }
+  size_type &siz(const size_type i) { return std::get<2>(c[i]); }
   value_type potential(size_type x) {
     value_type ret = {};
-    while (c[x].first >= static_cast<difference_type>(0)) {
-      if (c[static_cast<size_type>(c[x].first)].first >=
-          static_cast<difference_type>(0)) {
-        c[x].second =
-            c[static_cast<size_type>(c[x].first)].second + c[x].second;
-        c[x].first = c[static_cast<size_type>(c[x].first)].first;
-      }
-      ret = ret + c[x].second;
-      x = static_cast<size_type>(c[x].first);
+    while (x != par(x)) {
+      val(x) = val(x) + val(par(x));
+      ret = ret + val(x);
+      x = par(x) = par(par(x));
     }
     return std::move(ret);
   }
@@ -33,27 +32,27 @@ private:
 public:
   PotentializedUnionFind() : c() {}
   explicit PotentializedUnionFind(const size_type size)
-      : c(size, std::make_pair(-1, value_type())) {}
+      : c(size, std::forward_as_tuple(static_cast<size_type>(0), value_type(),
+                                      static_cast<size_type>(1))) {
+    for (size_type i = 0; i < size; ++i)
+      par(i) = i;
+  }
 
   size_type size() const { return c.size(); }
   bool empty() const { return c.empty(); }
 
   size_type find(size_type x) {
     assert(x < size());
-    while (c[x].first >= static_cast<difference_type>(0)) {
-      if (c[static_cast<size_type>(c[x].first)].first >=
-          static_cast<difference_type>(0)) {
-        c[x].second =
-            c[static_cast<size_type>(c[x].first)].second + c[x].second;
-        c[x].first = c[static_cast<size_type>(c[x].first)].first;
-      }
-      x = static_cast<size_type>(c[x].first);
+    while (x != par(x)) {
+      val(x) = val(x) + val(par(x));
+      x = par(x) = par(par(x));
     }
     return x;
   }
   value_type diff(const size_type x, const size_type y) {
     assert(x < size());
     assert(y < size());
+    assert(same(x, y));
     return potential(y) + (-potential(x));
   }
   bool same(const size_type x, const size_type y) {
@@ -63,29 +62,30 @@ public:
   }
   size_type size(const size_type x) {
     assert(x < size());
-    return static_cast<size_type>(-c[find(x)].first);
+    return siz(find(x));
   }
 
   bool unite(size_type x, size_type y, value_type d) {
     assert(x < size());
     assert(y < size());
-    d = d + diff(y, x);
+    d = d + potential(x) + (-potential(y));
     x = find(x);
     y = find(y);
     if (x == y)
       return false;
-    if (c[x].first > c[y].first)
+    if (siz(x) < siz(y))
       std::swap(x, y), d = -d;
-    c[x].first += c[y].first;
-    c[y] = std::make_pair(static_cast<difference_type &&>(x), std::move(d));
+    siz(x) += siz(y);
+    par(y) = x;
+    val(y) = std::move(d);
     return true;
   }
 };
 
 /*
 
-verify:https://beta.atcoder.jp/contests/abc087/submissions/2509195
-      :http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2860228#1
+verify:https://beta.atcoder.jp/contests/abc087/submissions/2525726
+      :http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2873771#1
 
 template <class Abelian>
 class PotentializedUnionFind;
@@ -112,15 +112,11 @@ PotentializedUnionFindはポテンシャルが付いた要素からなる素集�
 -value_type
  要素の型 (Abelian)
 
--difference_type
- 符号あり整数型 (std::ptrdiff_t)
- 内部実装で使用
+-size_type
+ 符号なし整数型 (std::size_t)
 
 -container_type
  内部で使用するコンテナ型
-
--size_type
- 符号なし整数型
 
 
 メンバ関数

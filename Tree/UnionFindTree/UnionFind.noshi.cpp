@@ -1,32 +1,32 @@
 #include <cassert>
 #include <cstddef>
+#include <numeric>
 #include <utility>
 #include <vector>
 
 class UnionFind {
 
 public:
-  using difference_type = std::ptrdiff_t;
-  using container_type = std::vector<difference_type>;
-  using size_type = typename container_type::size_type;
+  using size_type = std::size_t;
+  using container_type = std::vector<size_type>;
 
 protected:
-  container_type c;
+  container_type p, s;
 
 public:
-  UnionFind() : c() {}
-  explicit UnionFind(const size_type size) : c(size, -1) {}
+  UnionFind() : p(), s() {}
+  explicit UnionFind(const size_type size)
+      : p(size), s(size, static_cast<size_type>(1)) {
+    std::iota(p.begin(), p.end(), static_cast<size_type>(0));
+  }
 
-  size_type size() const { return c.size(); }
-  bool empty() const { return c.empty(); }
+  size_type size() const { return p.size(); }
+  bool empty() const { return p.empty(); }
 
   size_type find(size_type x) {
     assert(x < size());
-    while (c[x] >= static_cast<difference_type>(0)) {
-      if (c[static_cast<size_type>(c[x])] >= static_cast<difference_type>(0))
-        c[x] = c[static_cast<size_type>(c[x])];
-      x = static_cast<size_type>(c[x]);
-    }
+    while (p[x] != x)
+      x = p[x] = p[p[x]];
     return x;
   }
   bool same(const size_type x, const size_type y) {
@@ -36,7 +36,7 @@ public:
   }
   size_type size(const size_type x) {
     assert(x < size());
-    return static_cast<size_type>(-c[find(x)]);
+    return s[find(x)];
   }
 
   bool unite(size_type x, size_type y) {
@@ -46,18 +46,18 @@ public:
     y = find(y);
     if (x == y)
       return false;
-    if (c[x] > c[y])
+    if (s[x] < s[y])
       std::swap(x, y);
-    c[x] += c[y];
-    c[y] = static_cast<difference_type>(x);
+    s[x] += s[y];
+    p[y] = x;
     return true;
   }
 };
 
 /*
 
-verify:https://beta.atcoder.jp/contests/atc001/submissions/2509045
-      :http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2860145#1
+verify:https://beta.atcoder.jp/contests/atc001/submissions/2525740
+      :http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2873775#1
 
 class UnionFind;
 
@@ -66,15 +66,11 @@ UnionFindは素集合を管理するデータ構造です
 
 
 メンバ型
--difference_type
- 符号あり整数型 (std::ptrdiff_t)
- 内部実装で使用
+-size_type
+ 符号なし整数型 (std::size_t)
 
 -container_type
- 内部で使用するコンテナ型 (std::vector<difference_type>)
-
--size_type
- 符号なし整数型 (container_type::size_type)
+ 内部で使用するコンテナ型 (std::vector<size_type>)
 
 
 メンバ関数
