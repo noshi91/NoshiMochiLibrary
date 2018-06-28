@@ -1,142 +1,143 @@
 #include <cassert>
-#include <cstdint>
-#include <cstdlib>
+#include <cstddef>
 #include <functional>
+#include <memory>
 #include <utility>
 
-template <typename T, class Compare = std::greater<T>> class PairingHeap {
-  static constexpr std::uint_fast64_t ALLOCSIZE = (std::uint_fast64_t)1 << 10;
+template <class T, class Compare = ::std::less_equal<T>> class pairing_heap {
 
 public:
   using value_type = T;
-  using reference = value_type &;
   using const_reference = const value_type &;
-  using size_type = std::uint_fast32_t;
+  using size_type = ::std::size_t;
+  using value_compare = Compare;
 
 private:
-  struct node_t {
-    value_type data;
-    node_t *left, *right;
+  struct node_type {
+    value_type value;
+    ::std::unique_ptr<node_type> left, right;
+    template <class... Args>
+    node_type(Args &&... args)
+        : value(::std::forward<Args>(args)...), left(), right() {}
   };
-  node_t *root;
-  size_type size_;
-  static node_t *merge(node_t *x, node_t *y) {
-    static const Compare comp = Compare();
-    if (comp(y->data, x->data))
-      std::swap(x, y);
-    x->right = y->left;
-    y->left = x;
-    return y;
+  using pointer = ::std::unique_ptr<node_type>;
+  pointer root;
+  value_compare comp;
+  size_type s;
+  pointer merge(pointer x, pointer y) {
+    if (!x)
+      return ::std::move(y);
+    if (!y)
+      return ::std::move(x);
+    if (!comp(x->value, y->value))
+      x.swap(y);
+    y->right = ::std::move(x->left);
+    x->left = ::std::move(y);
+    return ::std::move(x);
+  }
+  pointer mergelist(pointer curr) {
+    pointer head, temp, next;
+    while (curr) {
+      next = ::std::move(curr->right);
+      if (next) {
+        temp = ::std::move(next->right);
+        curr = merge(::std::move(curr), ::std::move(next));
+      }
+      curr->right = ::std::move(head);
+      head = ::std::move(curr);
+      curr = ::std::move(temp);
+    }
+    while (head) {
+      next = ::std::move(head->right);
+      curr = merge(::std::move(curr), ::std::move(head));
+      head = ::std::move(next);
+    }
+    return ::std::move(curr);
   }
 
 public:
-  PairingHeap() : root(nullptr), size_(0) {}
-  const_reference top() const {
-    assert(root);
-    return root->data;
+  pairing_heap() : root(), comp(), s(0) {}
+  explicit pairing_heap(const value_compare &x) : root(), comp(x), s(0) {}
+
+  bool empty() const noexcept { return !root; }
+  size_type size() const noexcept { return s; }
+
+  const_reference top() const noexcept {
+    assert(!empty());
+    return root->value;
   }
-  const_reference pop() {
-    assert(root);
-    --size_;
-    const_reference ret = root->data;
-    node_t *n = nullptr, *x = root->left, *y;
-    while (x) {
-      y = x;
-      if (x->right) {
-        x = x->right->right;
-        y = merge(y, y->right);
-      } else
-        x = nullptr;
-      y->right = n;
-      n = y;
-    }
-    if (!n) {
-      root = nullptr;
-      return ret;
-    }
-    root = n;
-    n = n->right;
-    while (n) {
-      x = n;
-      n = n->right;
-      root = merge(root, x);
-    }
-    return ret;
+
+  void push(const value_type &x) {
+    root = merge(::std::move(root), ::std::make_unique<node_type>(x));
+    ++s;
   }
-  void push(const_reference data) {
-    static node_t *pool = nullptr;
-    static std::uint_fast64_t it = ALLOCSIZE;
-    if (it == ALLOCSIZE) {
-      pool = (node_t *)malloc(ALLOCSIZE * sizeof(node_t));
-      it = 0;
-    }
-    node_t *top = &pool[it++];
-    top->data = data;
-    top->left = nullptr;
-    root = root ? merge(root, top) : top;
-    ++size_;
+  void push(value_type &&x) {
+    root =
+        merge(::std::move(root), ::std::make_unique<node_type>(::std::move(x)));
+    ++s;
   }
-  bool empty() const { return !root; }
-  size_type size() const { return size_; }
-  void meld(PairingHeap<T, Compare> &other) {
-    size_ += other.size_;
-    other.size_ = 0;
-    if (other.root) {
-      root = root ? merge(root, other.root) : other.root;
-      other.root = nullptr;
-    }
+  template <class... Args> void emplace(Args &&... args) {
+    root = merge(::std::move(root),
+                 ::std::make_unique<node_type>(::std::forward<Args>(args)...));
+    ++s;
+  }
+
+  void pop() {
+    assert(!empty());
+    root = mergelist(::std::move(root->left));
+    --s;
+  }
+
+  void meld(pairing_heap &x) {
+    s += x.s;
+    x.s = 0;
+    root = merge(::std::move(root), ::std::move(x.root));
+  }
+  pairing_heap &operator+=(pairing_heap &x) {
+    meld(x);
+    return *this;
   }
 };
 
 /*
 
-verify:https://beta.atcoder.jp/contests/apc001/submissions/2280810
+verify:https://beta.atcoder.jp/contests/apc001/submissions/2751553
+      :https://beta.atcoder.jp/contests/arc098/submissions/2751569
 
-template<typename T, class Compare = std::greater<T>>
-class PairingHeap;
+template<class T, class Compare = ::std::less_equal<T>>
+class pairing_heap;
 
-PairingHeapは融合可能なヒープ(優先度付きキュー)です
+pairing_heap は融合可能なヒープ(優先度付きキュー)です
 空間計算量 O(N)
 
 
 テンプレートパラメータ
--typename T
- operator< によって大小が定義された構造体
- 要素の型になります
+-class T
+ 要素の型
 
 -class Compare
- 大小比較を行うクラス
- デフォルトでは std::greater<T> で最小ヒープ(昇順)です
+ T が全順序集合を成すように大小比較を行うクラス
+ デフォルトでは ::std::less_equal<T> で最小ヒープ(昇順)です
 
 
 メンバ型
 -value_type
  要素の型 (T)
 
--reference
- 要素(value_type)への参照型 (value_type &)
-
 -const_reference
  要素(value_type)へのconst参照型 (const value_type &)
 
 -size_type
- 要素数を表す符号なし整数型 (std::uint_fast32_t)
+ 要素数を表す符号なし整数型 (::std::size_t)
+
+-value_compare
+ 比較クラスの型 (Compare)
+
 
 メンバ関数
--(constructor) ()
- 空のヒープを構築します
- 時間計算量 O(1)
-
--top (void)->const_reference
- 先頭の要素のconst参照を返します
- 時間計算量 O(1)
-
--pop (void)->const_reference
- 先頭の要素を削除し、そのconst参照を返します
- 時間計算量 償却 O(logN)
-
--push (const_reference data)
- data を要素としてヒープに追加します
+-(constructor) (const value_compare &x)
+ x を比較関数として、空のヒープを構築します
+ デフォルトでは value_compare() が使用されます
  時間計算量 O(1)
 
 -empty ()->bool
@@ -147,13 +148,36 @@ PairingHeapは融合可能なヒープ(優先度付きキュー)です
  要素数を返します
  時間計算量 O(1)
 
--meld (ParingHeap<T, Compare> &other)
- other の持つ要素全てをヒープに追加します
- other は空になります
+-top ()->const_reference
+ 先頭の要素のconst参照を返します
+ 時間計算量 O(1)
+
+-push (const value_type &x)
+ x を要素として追加します
+ 時間計算量 O(1)
+
+-template<class... Args>
+ emplace (Args&&... args)
+ コンストラクタの引数から直接構築で要素を追加します
+ 時間計算量 O(1)
+
+-pop ()
+ 先頭の要素を削除します
+ 時間計算量 O(logN)
+
+-meld (pairing_heap &x)
+ x の全要素を追加します
+ x は空になります
+ 時間計算量 O(1)
+
+-operator+= (pairing_heap &x)->pairing_heap &
+ x の全要素を追加します
+ x は空になります
+ 本体の参照を返します
  時間計算量 O(1)
 
 
 ※N:要素数
-※Compare の時間計算量を O(1) と仮定
+※比較クラスの時間計算量を O(1) と仮定
 
 */
