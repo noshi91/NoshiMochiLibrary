@@ -1,3 +1,7 @@
+/*
+References:  https://qiita.com/okateim/items/e2f4a734db4e5f90e410
+*/
+
 #include <array>
 #include <cassert>
 #include <cstddef>
