@@ -74,15 +74,17 @@ sparse_table は半束の区間和を高速に計算するデータ構造です
 
 テンプレートパラメータ
 -class Band
- 結合律 ∀a, ∀b, ∀c, a·(b·c) = (a·b)·c
- 冪等律 ∀a, a·a = a
+ -結合律
+  ∀a, ∀b, ∀c, a·(b·c) = (a·b)·c
+ -冪等律
+  ∀a, a·a = a
  以上の条件を満たす代数的構造 (冪等半群)
 
  以下のメンバを要求します
  -value_type
   台集合の型
- -operation (value_type, value_type)->value_type
-  2引数を演算した結果を返す関数
+ -static operation (value_type, value_type)->value_type
+  2引数を取り、演算した結果を返す静的関数
 
 
 メンバ型

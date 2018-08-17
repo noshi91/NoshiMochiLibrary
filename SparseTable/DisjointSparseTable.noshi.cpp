@@ -90,15 +90,16 @@ disjoint_sparse_table は静的な半群列の区間和を高速に計算する�
 
 
 テンプレートパラメータ
--typename Semigroup
- 結合律 ∀a, ∀b, ∀c, a·(b·c) = (a·b)·c
+-class Semigroup
+ -結合律
+  ∀a, ∀b, ∀c, a·(b·c) = (a·b)·c
  以上の条件を満たす代数的構造 (半群)
 
  以下のメンバを要求します
  -value_type
   台集合の型
- -operation (value_type, value_type)->value_type
-  2引数を演算した結果を返す関数
+ -static operation (value_type, value_type)->value_type
+  2引数を取り、演算した結果を返す静的関数
 
 
 メンバ型

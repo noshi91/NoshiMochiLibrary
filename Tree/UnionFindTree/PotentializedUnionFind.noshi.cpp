@@ -1,51 +1,56 @@
 #include <cassert>
-#include <cstddef>
-#include <tuple>
 #include <utility>
-#include <vector>
 
-template <class Abelian> class PotentializedUnionFind {
+template <class Group, template <class> class Container>
+class potentialized_union_find {
+protected:
+  class node_type;
 
 public:
-  using value_type = Abelian;
-  using size_type = std::size_t;
-  using container_type =
-      std::vector<std::tuple<size_type, value_type, size_type>>;
+  using value_structure = Group;
+  using value_type = typename value_structure::value_type;
+  using container_type = Container<node_type>;
+  using size_type = typename container_type::size_type;
 
 protected:
-  container_type c;
+  class node_type {
+  public:
+    typename potentialized_union_find::size_type parent;
+    typename potentialized_union_find::value_type value;
+    typename potentialized_union_find::size_type size;
+  };
+
+  container_type tree;
 
 private:
-  size_type &par(const size_type i) { return std::get<0>(c[i]); }
-  value_type &val(const size_type i) { return std::get<1>(c[i]); }
-  size_type &siz(const size_type i) { return std::get<2>(c[i]); }
   value_type potential(size_type x) {
-    value_type ret = {};
-    while (x != par(x)) {
-      val(x) = val(x) + val(par(x));
-      ret = ret + val(x);
-      x = par(x) = par(par(x));
+    value_type ret = value_structure::identity();
+    while (tree[x].parent != x) {
+      tree[x].value =
+          value_structure::operation(tree[tree[x].parent].value, tree[x].value);
+      ret = value_structure::operation(tree[x].value, ret);
+      x = tree[x].parent = tree[tree[x].parent].parent;
     }
-    return std::move(ret);
+    return ::std::move(ret);
   }
 
 public:
-  PotentializedUnionFind() : c() {}
-  explicit PotentializedUnionFind(const size_type size)
-      : c(size, std::forward_as_tuple(static_cast<size_type>(0), value_type(),
-                                      static_cast<size_type>(1))) {
+  potentialized_union_find() : tree() {}
+  explicit potentialized_union_find(const size_type size)
+      : tree(size, {0, value_structure::identity(), 1}) {
     for (size_type i = 0; i < size; ++i)
-      par(i) = i;
+      tree[i].parent = i;
   }
 
-  size_type size() const { return c.size(); }
-  bool empty() const { return c.empty(); }
+  bool empty() const { return tree.empty(); }
+  size_type size() const { return tree.size(); }
 
   size_type find(size_type x) {
     assert(x < size());
-    while (x != par(x)) {
-      val(x) = val(x) + val(par(x));
-      x = par(x) = par(par(x));
+    while (tree[x].parent != x) {
+      tree[x].value =
+          value_structure::operation(tree[tree[x].parent].value, tree[x].value);
+      x = tree[x].parent = tree[tree[x].parent].parent;
     }
     return x;
   }
@@ -53,7 +58,8 @@ public:
     assert(x < size());
     assert(y < size());
     assert(same(x, y));
-    return potential(y) + (-potential(x));
+    return value_structure::operation(value_structure::inverse(potential(x)),
+                                      potential(y));
   }
   bool same(const size_type x, const size_type y) {
     assert(x < size());
@@ -62,61 +68,81 @@ public:
   }
   size_type size(const size_type x) {
     assert(x < size());
-    return siz(find(x));
+    return tree[find(x)].size;
   }
 
-  bool unite(size_type x, size_type y, value_type d) {
+  ::std::pair<size_type, size_type> unite(size_type x, size_type y,
+                                          value_type d) {
     assert(x < size());
     assert(y < size());
-    d = d + potential(x) + (-potential(y));
+    d = value_structure::operation(
+        value_structure::operation(potential(x), ::std::move(d)),
+        value_structure::inverse(potential(y)));
     x = find(x);
     y = find(y);
-    if (x == y)
-      return false;
-    if (siz(x) < siz(y))
-      std::swap(x, y), d = -d;
-    siz(x) += siz(y);
-    par(y) = x;
-    val(y) = std::move(d);
-    return true;
+    if (x != y) {
+      if (tree[x].size < tree[y].size) {
+        ::std::swap(x, y);
+        d = value_structure::inverse(::std::move(d));
+      }
+      tree[x].size += tree[y].size;
+      tree[y].parent = x;
+      tree[y].value = ::std::move(d);
+    }
+    return {x, y};
   }
 };
 
 /*
 
-verify:https://beta.atcoder.jp/contests/abc087/submissions/2525726
-      :http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2873771#1
+verify:https://beta.atcoder.jp/contests/abc087/submissions/3018497
+      :http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=3095975#1
 
-template <class Abelian>
-class PotentializedUnionFind;
+template <class Group, template <class> class Container>
+class potentialized_union_find;
 
-PotentializedUnionFindはポテンシャルが付いた要素からなる素集合を管理するデータ構造です
+potentialized_union_find はポテンシャルが付いた要素からなる
+素集合を管理するデータ構造です
 空間計算量 O(N)
 
 
 テンプレートパラメータ
--class Abelian
- 結合律 ∀a, ∀b, ∀c, a + (b + c) = (a + b) + c
- 交換律 ∀a, ∀b, a + b = b + a
- 単位元 ∃e, ∀a, e + a = a + e = a
- 逆元　 ∀a, ∃-a, a + (-a) = e
- 以上の条件を満たす代数的構造 (アーベル群)
+-class Group
+ -結合律
+  ∀a, ∀b, ∀c, a·(b·c) = (a·b)·c
+ -単位元の存在
+  ∃e, ∀a, e·a = a·e = a
+ -逆元の存在
+  ∀a, ∃a^-1, a·(a^-1) = (a^-1)·a = e
+ 以上の条件を満たす代数的構造 (群)
 
- -加法   :operator+(2項)
- -単位元 :デフォルトコンストラクタ
- -逆元   :operator-(単項)
-  以上のように定義されている必要があります
+ 以下のメンバを要求します
+ -value_type
+  台集合の型
+ -static operation (value_type, value_type)->value_type
+  2引数を取り、演算した結果を返す静的関数
+ -static identity ()->value_type
+  単位元を返す静的関数
+ -static inverse (value_type)->value_type
+  1引数を取り、逆元を返す静的関数
+
+-template <class> class Container
+ 型引数を1つ取り、それを要素とするコンテナ型
+ 内部実装で使用します
 
 
 メンバ型
--value_type
- 要素の型 (Abelian)
+-value_structure
+ 構造の型 (Group)
 
--size_type
- 符号なし整数型 (std::size_t)
+-value_type
+ 要素となる台集合の型 (value_structure::value_type)
 
 -container_type
  内部で使用するコンテナ型
+
+-size_type
+ 符号なし整数型 (container_type::size_type)
 
 
 メンバ関数
@@ -124,12 +150,12 @@ PotentializedUnionFindはポテンシャルが付いた要素からなる素集�
  独立した要素を size 個持つ状態で構築します
  時間計算量 O(N)
 
--size ()->size_type
- 全体の要素数を返します
- 時間計算量 O(1)
-
 -empty()->bool
  全体の集合が空であるかどうかを真偽値で返します
+ 時間計算量 O(1)
+
+-size ()->size_type
+ 全体の要素数を返します
  時間計算量 O(1)
 
 -find (size_type x)->size_type
@@ -153,12 +179,12 @@ PotentializedUnionFindはポテンシャルが付いた要素からなる素集�
  x と y がそれぞれ含まれる集合を x を基準とした y のポテンシャルが
  d となるように併合します
  x と y が既に同じ集合に属していた場合、ポテンシャルは変化しません
- 併合に成功したか、すなわち x と y が違う集合に属していたかを真偽値で返します
+ 併合前の x, y それぞれの根を、併合後に根となったほうを第一要素として返します
  時間計算量 償却 O(α(N))
 
 
 ※N:全体の要素数
-※α():アッカーマン関数の逆関数
-※operator+, operator-の時間計算量を O(1) と仮定
+※α():アッカーマン関数 A(n, n) の逆関数
+※value_structure の各関数の時間計算量を O(1) と仮定
 
 */
