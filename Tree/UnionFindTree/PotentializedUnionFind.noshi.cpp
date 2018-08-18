@@ -175,7 +175,8 @@ potentialized_union_find はポテンシャルが付いた要素からなる
  x の含まれる集合に含まれる要素数を返します
  時間計算量 償却 O(α(N))
 
--unite (size_type x, size_type y, value_type d)->bool
+-unite (size_type x, size_type y, value_type d)
+        ->::std::pair<size_type, size_type>
  x と y がそれぞれ含まれる集合を x を基準とした y のポテンシャルが
  d となるように併合します
  x と y が既に同じ集合に属していた場合、ポテンシャルは変化しません

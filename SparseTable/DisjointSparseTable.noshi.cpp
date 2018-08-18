@@ -104,7 +104,7 @@ disjoint_sparse_table は静的な半群列の区間和を高速に計算する�
 
 メンバ型
 -value_structure
- 構造の型 (Seemigroup)
+ 構造の型 (Semigroup)
 
 -value_type
  要素となる台集合の型 (value_structure::value_type)
