@@ -302,7 +302,7 @@ template<class ...Args>
 
 -pop_back ()
  末尾の要素を削除します
- 時間計算量  O(1)
+ 時間計算量 償却 O(1)
 
 -push_front (value_type x)
  先頭に要素を追加します
@@ -315,7 +315,7 @@ template<class ...Args>
 
 -pop_front ()
  先頭の要素を削除します
- 時間計算量  O(1)
+ 時間計算量 償却 O(1)
 
 
 ※ N:全体の要素数
