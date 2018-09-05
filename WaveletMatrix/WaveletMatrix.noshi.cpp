@@ -3,75 +3,98 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
-#ifdef __has_builtin
-::std::size_t popcount64(::std::uint_fast64_t c) {
-  return __builtin_popcountll(c);
-}
-#else
-::std::size_t popcount64(::std::uint_fast64_t c) {
-  c = (c & 0x5555555555555555) + ((c & 0xAAAAAAAAAAAAAAAA) >> 1);
-  c = (c & 0x3333333333333333) + ((c & 0xCCCCCCCCCCCCCCCC) >> 2);
-  return static_cast<::std::size_t>(
-      ((c + (c >> 4)) & 0x0F0F0F0F0F0F0F0F) * 0x0101010101010101 >> 56 & 0x7f);
-}
-#endif
-
-template <typename Integral,
-          ::std::size_t bitsize = ::std::numeric_limits<Integral>::digits()>
+template <class Integral, ::std::size_t Bitlength, Integral None>
 class wavelet_matrix {
 public:
   using value_type = Integral;
   using size_type = ::std::size_t;
+  static constexpr value_type none = None;
 
 private:
-  using uint64 = ::std::uint_fast64_t;
-  struct bitvector {
-    ::std::vector<::std::pair<uint64, size_type>> dic;
+  class bitvector {
+    using bitfield = ::std::uint_least64_t;
+    static constexpr ::std::size_t wardsize = 64;
+    static ::std::size_t popcount(bitfield c) {
+#ifdef __has_builtin
+      return __builtin_popcountll(c);
+#else
+      c = (c & 0x5555555555555555ULL) + (c >> 1 & 0x5555555555555555ULL);
+      c = (c & 0x3333333333333333ULL) + (c >> 2 & 0x3333333333333333ULL);
+      c = (c + (c >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
+      return static_cast<::std::size_t>(c * 0x0101010101010101ULL >> 56 & 0x7f);
+#endif
+    }
+    using value_type = typename wavelet_matrix::value_type;
+    using size_type = typename wavelet_matrix::size_type;
+    ::std::vector<::std::pair<bitfield, size_type>> dic;
+
+  public:
     size_type cnt;
     value_type bit;
-    bitvector() {}
-    bitvector(const size_type bsize) : dic(bsize, {0, 0}) {}
+    constexpr bitvector() : dic(), cnt(0), bit(0) {}
+    bitvector(const size_type size, const value_type b)
+        : dic(size / wardsize + 1, {0, 0}), cnt(0), bit(b) {}
     void set(const size_type index) {
-      dic[index >> 6].first |= static_cast<uint64>(1) << (index & 0x3f);
+      dic[index / wardsize].first |= static_cast<bitfield>(1)
+                                     << (index % wardsize);
     }
     void build() {
       const size_type len = dic.size();
       for (size_type i = 1; i < len; ++i)
-        dic[i].second = dic[i - 1].second + popcount64(dic[i - 1].first);
+        dic[i].second = dic[i - 1].second + popcount(dic[i - 1].first);
     }
     size_type rank(const size_type last) const {
-      return dic[last >> 6].second +
-             popcount64(dic[last >> 6].first &
-                        (static_cast<uint64>(1) << (last & 0x3f)) - 1);
+      return dic[last / wardsize].second +
+             popcount(dic[last / wardsize].first &
+                      (static_cast<bitfield>(1) << (last % wardsize)) - 1);
     }
     bool access(const size_type index) const {
-      return dic[index >> 6].first >> (index & 0x3f) & 1;
+      return dic[index / wardsize].first >> (index % wardsize) & 1;
     }
   };
-  ::std::array<bitvector, bitsize> matrix_;
-  value_type not_found_;
+  static bool valid(const value_type value) {
+    return value == none || !(value >> (Bitlength - 1) >> 1);
+  }
+  ::std::array<bitvector, Bitlength> matrix;
   size_type size_;
 
+  size_type at_least(size_type first, size_type last,
+                     const value_type value) const {
+    assert(first <= size());
+    assert(last <= size());
+    assert(first <= last);
+    size_type ret = 0;
+    for (const auto &v : matrix) {
+      const size_type l = v.rank(first), r = v.rank(last);
+      if (value & v.bit) {
+        first = l + v.cnt;
+        last = r + v.cnt;
+      } else {
+        ret += r - l;
+        first -= l;
+        last -= r;
+      }
+    }
+    return ret + last - first;
+  }
+
 public:
-  wavelet_matrix() : matrix_(), size_(0), not_found_(0) {}
+  constexpr wavelet_matrix() : matrix(), size_(0) {}
   template <class InputIter>
-  wavelet_matrix(InputIter first, InputIter last,
-                 const value_type not_found = 0)
-      : size_(0), not_found_(not_found) {
+  wavelet_matrix(InputIter first, InputIter last) : matrix(), size_(0) {
     ::std::vector<value_type> vec0(first, last);
-    size_ = vec0.size();
-    const size_type len = size_, block = (len >> 5) + 1;
+    const size_type len = vec0.size();
+    size_ = len;
     ::std::vector<value_type> vec_l(len), vec_r(len);
     size_type l, r;
-    value_type temp = static_cast<value_type>(1) << (bitsize - 1);
-    for (auto &v : matrix_) {
-      v = bitvector(block);
-      v.bit = temp;
-      temp = temp >> 1 & ~temp;
+    value_type temp = static_cast<value_type>(1) << (Bitlength - 1);
+    for (auto &v : matrix) {
+      v = bitvector(len, temp);
+      temp >>= 1;
       l = 0;
       r = 0;
       for (size_type j = 0; j < len; ++j)
@@ -82,45 +105,54 @@ public:
       v.cnt = l;
       v.build();
       ::std::swap(vec0, vec_l);
-      ::std::copy(vec_r.begin(), vec_r.begin() + r, vec0.begin() + l);
+      ::std::copy(vec_r.cbegin(), vec_r.cbegin() + r, vec0.begin() + l);
     }
   }
 
   size_type size() const noexcept { return size_; }
   bool empty() const noexcept { return size() == 0; }
 
-  value_type access(size_type index) const {
+  value_type operator[](size_type index) const {
     assert(index < size());
     value_type ret = 0;
-    for (const auto &v : matrix_)
+    for (const auto &v : matrix)
       if (v.access(index))
         ret |= v.bit, index = v.rank(index) + v.cnt;
       else
         index -= v.rank(index);
     return ret;
   }
-  value_type operator[](const size_type index) const {
-    assert(index < size());
-    return access(index);
+  value_type at(const size_type index) const {
+    if (index < size())
+      return operator[](index);
+    else
+      throw ::std::out_of_range("index out of range");
   }
-  size_type rank(size_type first, size_type last, const value_type x) const {
+
+  size_type rank(size_type first, size_type last,
+                 const value_type value) const {
     assert(first <= size());
     assert(last <= size());
     assert(first <= last);
-    for (const auto &v : matrix_)
-      if (x & v.bit)
+    assert(valid(value));
+    for (const auto &v : matrix)
+      if (value & v.bit)
         first = v.rank(first) + v.cnt, last = v.rank(last) + v.cnt;
       else
         first -= v.rank(first), last -= v.rank(last);
     return last - first;
   }
-  value_type quantile(size_type first, size_type last, size_type k) const {
-    assert(first < size());
+  value_type quantile(size_type first, size_type last, size_type k = 0,
+                      const value_type upper = none) const {
+    assert(first <= size());
     assert(last <= size());
-    assert(first < last);
-    assert(last - first > k);
+    assert(valid(upper));
+    if (upper != none)
+      k += rangefreq(first, last, upper, none);
+    if (last - first <= k)
+      return none;
     value_type ret = 0;
-    for (const auto &v : matrix_) {
+    for (const auto &v : matrix) {
       const size_type l = v.rank(first), r = v.rank(last);
       if (r - l > k)
         first = l + v.cnt, last = r + v.cnt, ret |= v.bit;
@@ -129,133 +161,37 @@ public:
     }
     return ret;
   }
-  value_type rquantile(size_type first, size_type last, size_type k) const {
-    assert(first < size());
-    assert(last <= size());
-    assert(first < last);
-    assert(last - first > k);
-    return quantile(first, last, last - first - k - 1);
-  }
-  size_type less_than(size_type first, size_type last,
-                      const value_type x) const {
+  value_type rquantile(const size_type first, const size_type last,
+                       size_type k = 0, const value_type lower = none) const {
     assert(first <= size());
     assert(last <= size());
     assert(first <= last);
-    size_type ret = 0;
-    for (const auto &v : matrix_) {
-      if (x & v.bit) {
-        ret += last - first + v.rank(first) - v.rank(last);
-        first = v.rank(first) + v.cnt;
-        last = v.rank(last) + v.cnt;
-      } else {
-        first -= v.rank(first);
-        last -= v.rank(last);
-      }
-    }
-    return ret;
+    assert(valid(lower));
+    if (lower != none)
+      k += rangefreq(first, last, none, lower);
+    if (last - first <= k)
+      return none;
+    return quantile(first, last, last - first - k - 1, none);
   }
-  size_type at_least(size_type first, size_type last,
-                     const value_type x) const {
+  size_type rangefreq(const size_type first, const size_type last,
+                      const value_type lower, const value_type upper) const {
     assert(first <= size());
     assert(last <= size());
     assert(first <= last);
-    size_type ret = 0;
-    for (const auto &v : matrix_) {
-      if (x & v.bit) {
-        first = v.rank(first) + v.cnt;
-        last = v.rank(last) + v.cnt;
-      } else {
-        ret += v.rank(last) - v.rank(first);
-        first -= v.rank(first);
-        last -= v.rank(last);
-      }
-    }
-    return ret + (last - first);
-  }
-  size_type greater_than(size_type first, size_type last,
-                         const value_type x) const {
-    assert(first <= size());
-    assert(last <= size());
-    assert(first <= last);
-    size_type ret = 0;
-    for (const auto &v : matrix_) {
-      if (x & v.bit) {
-        first = v.rank(first) + v.cnt;
-        last = v.rank(last) + v.cnt;
-      } else {
-        ret += v.rank(last) - v.rank(first);
-        first -= v.rank(first);
-        last -= v.rank(last);
-      }
-    }
-    return ret;
-  }
-  size_type at_most(size_type first, size_type last, const value_type x) const {
-    assert(first <= size());
-    assert(last <= size());
-    assert(first <= last);
-    size_type ret = 0;
-    for (const auto &v : matrix_) {
-      if (x & v.bit) {
-        ret += last - first + v.rank(first) - v.rank(last);
-        first = v.rank(first) + v.cnt;
-        last = v.rank(last) + v.cnt;
-      } else {
-        first -= v.rank(first);
-        last -= v.rank(last);
-      }
-    }
-    return ret + (last - first);
-  }
-  size_type rangefreq(size_type first, size_type last, const value_type lower,
-                      const value_type upper) const {
-    assert(first <= size());
-    assert(last <= size());
-    assert(first <= last);
-    assert(lower <= upper);
-    return at_least(first, last, lower) - at_least(first, last, upper);
-  }
-  value_type successor(const size_type first, const size_type last,
-                       const value_type x) const {
-    assert(first <= size());
-    assert(last <= size());
-    assert(first <= last);
-    const size_type k = at_least(first, last, x);
-    return k ? quantile(first, last, k - 1) : not_found_;
-  }
-  value_type predecessor(const size_type first, const size_type last,
-                         const value_type x) const {
-    assert(first <= size());
-    assert(last <= size());
-    assert(first <= last);
-    const size_type k = greater_than(first, last, x);
-    return last - first == k ? not_found_ : quantile(first, last, k);
-  }
-  value_type strict_succ(const size_type first, const size_type last,
-                         const value_type x) const {
-    assert(first <= size());
-    assert(last <= size());
-    assert(first <= last);
-    const size_type k = greater_than(first, last, x);
-    return k ? quantile(first, last, k - 1) : not_found_;
-  }
-  value_type strict_pred(const size_type first, const size_type last,
-                         const value_type x) const {
-    assert(first <= size());
-    assert(last <= size());
-    assert(first <= last);
-    const size_type k = at_least(first, last, x);
-    return last - first == k ? not_found_ : quantile(first, last, k);
+    assert(valid(lower));
+    assert(valid(upper));
+    assert(lower == none || upper == none || lower <= upper);
+    size_type ret = lower == none ? last - first : at_least(first, last, lower);
+    return upper == none ? ret : ret - at_least(first, last, upper);
   }
 };
 
 /*
 
-verify:http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=2948867#1
-      :https://beta.atcoder.jp/contests/abc091/submissions/2701933
+verify:http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=3121199#1
+      :https://beta.atcoder.jp/contests/abc091/submissions/3139896
 
-template<typename Integral,
-         ::std::size_t bitsize = ::std::numeric_limits<Integral>::digits()>
+template<class Integral, ::std::size_t Bitlength, Integral None>
 class wavelet_matrix;
 
 wavelet_matrix は静的な非負整数列に対する区間クエリを処理するデータ構造です
@@ -263,11 +199,14 @@ wavelet_matrix は静的な非負整数列に対する区間クエリを処理�
 
 
 テンプレートパラメータ
--typename Integral
+-class Integral
  要素となる整数型
 
--::std::size_t bitsize
- 扱うbit幅 ([0, 2^bitsize) の範囲を扱います)
+-::std::size_t Bitlength
+ 扱うbit幅 ([0, 2^Bitlength) の範囲を扱います)
+
+-Integral None
+ 関数の引数や返り値において、値が存在しないことを表現することに使用します
 
 
 メンバ型
@@ -278,13 +217,17 @@ wavelet_matrix は静的な非負整数列に対する区間クエリを処理�
  符号なし整数型 (::std::size_t)
 
 
+メンバ定数
+-none
+ None
+
+
 -メンバ関数
 template <class InpuIter>
--(constructor) (InputIter first, InpuIter last, value_type not_found = 0)
+-(constructor) (InputIter first, InpuIter last)
  [first, last) の要素から wavelet_matrix を構築します
  負数が含まれる場合、要素の大小関係を扱う関数が正常に機能しません
- not_found は幾つかのメンバ関数で値が存在しないことを示す返り値に使われます
- 時間計算量 O(N*bitsize)
+ 時間計算量 O(N*Bitlength)
 
 -size ()->size_type
  要素数を返します
@@ -294,69 +237,43 @@ template <class InpuIter>
  size()==0 と同値です
  時間計算量 O(1)
 
--access (size_type index)->value_type
- index で指定した要素を返します
- 時間計算量 O(bitsize)
-
 -operator[] (size_type index)->value_type
- access() と同値です
- 時間計算量 O(bitsize)
+ index で指定した要素の値を返します
+ 時間計算量 O(Bitlength)
 
--rank (size_type first, size_type last, value_type x)->size_type
- [first, last) に存在する x の数を返します
- 時間計算量 O(bitsize)
+-at (size_type index)->value_type
+ index で指定した要素を返します
+ index が範囲外の時、::std::out_of_range 例外を送出します
+ 時間計算量 O(Bitlength)
 
--quantile (size_type first, size_type last, size_type k)->value_type
- [first, last) で k 番目 (0-indexed) に大きい値を返します
- 時間計算量 O(bitsize)
+-rank (size_type first, size_type last, value_type value)->size_type
+ [first, last) に存在する value の数を返します
+ 時間計算量 O(Bitlength)
 
--rquantile (size_type first, size_type last, size_type k)->value_type
- [first, last) で k 番目 (0-indexed) に小さい値を返します
- 時間計算量 O(bitsize)
+-quantile (size_type first, size_type last, size_type k = 0,
+           value_type lower = none)->value_type
+ [first, last) で lower 以上の値のうち k 番目 (0-indexed) に大きい値を返します
+ lower = none のとき、対象は [first, last) の全ての値となります
+ 該当する値が存在しない時、none を返します
+ 時間計算量 O(Bitlength)
 
--less_than (size_type first, size_type last, value_type x)->size_type
- [first, last) で x より小さい要素の数を返します
- 時間計算量 O(bitsize)
-
--at_least (size_type first, size_type last, value_type x)->size_type
- [first, last) で x 以上の要素の数を返します
- 時間計算量 O(bitsize)
-
--greater_than (size_type first, size_type last, value_type x)->size_type
- [first, last) で x より大きい要素の数を返します
- 時間計算量 O(bitsize)
-
--at_most (size_type first, size_type last, value_type x)->size_type
- [first, last) で x 以下の要素の数を返します
- 時間計算量 O(bitsize)
+-rquantile (size_type first, size_type last, size_type k = 0,
+           value_type upper = none)->value_type
+ [first, last) で upper 未満の値のうち k 番目 (0-indexed) に小さい値を返します
+ upper = none のとき、対象は [first, last) の全ての値となります
+ 該当する値が存在しない時、none を返します
+ 時間計算量 O(Bitlength)
 
 -rangefreq (size_type first, size_type last,
             value_type lower, value_type upper)->size_type
  [first, last) で lower 以上 upper 未満の要素の数を返します
- 時間計算量 O(bitsize)
-
--successor (size_type first, size_type last, value_type x)->value_type
- [first, last) で x 以上で最小の要素を返します
- 存在しない場合 not_found を返します
- 時間計算量 O(bitsize)
-
--predecessor (size_type first, size_type last, value_type x)->value_type
- [first, last) で x 以下で最大の要素を返します
- 存在しない場合 not_found を返します
- 時間計算量 O(bitsize)
-
--strict_succ (size_type first, size_type last, value_type x)->value_type
- [first, last) で x より大きい最小の要素を返します
- 存在しない場合 not_found を返します
- 時間計算量 O(bitsize)
-
--strict_pred (size_type first, size_type last, value_type x)->value_type
- [first, last) で x より小さい最大の要素を返します
- 存在しない場合 not_found を返します
- 時間計算量 O(bitsize)
-
+ lower = none のとき下限は存在しません
+ upper = none のとき上限は存在しません
+ 下限、上限が両方存在するとき、lower <= upper が要求されます
+ 時間計算量 O(Bitlength)
 
 ※N:全体の要素数
-※popcount64() の時間計算量を O(1) と仮定
+※popcount() の時間計算量を O(1) と仮定
+  デフォルトの実装は O(logloglogN) です
 
 */
