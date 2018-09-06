@@ -148,7 +148,7 @@ public:
     assert(last <= size());
     assert(valid(upper));
     if (upper != none)
-      k += rangefreq(first, last, upper, none);
+      k += at_least(first, last, upper);
     if (last - first <= k)
       return none;
     value_type ret = 0;
@@ -168,7 +168,7 @@ public:
     assert(first <= last);
     assert(valid(lower));
     if (lower != none)
-      k += rangefreq(first, last, none, lower);
+      k += last - first - at_least(first, last, lower);
     if (last - first <= k)
       return none;
     return quantile(first, last, last - first - k - 1, none);
@@ -188,8 +188,8 @@ public:
 
 /*
 
-verify:http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=3121199#1
-      :https://beta.atcoder.jp/contests/abc091/submissions/3139896
+verify:http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=3122145#1
+      :https://beta.atcoder.jp/contests/abc091/submissions/3142824
 
 template<class Integral, ::std::size_t Bitlength, Integral None>
 class wavelet_matrix;
@@ -251,16 +251,16 @@ template <class InpuIter>
  時間計算量 O(Bitlength)
 
 -quantile (size_type first, size_type last, size_type k = 0,
-           value_type lower = none)->value_type
- [first, last) で lower 以上の値のうち k 番目 (0-indexed) に大きい値を返します
- lower = none のとき、対象は [first, last) の全ての値となります
+           value_type upper = none)->value_type
+ [first, last) で upper 未満の値のうち k 番目 (0-indexed) に大きい値を返します
+ upper = none のとき、対象は [first, last) の全ての値となります
  該当する値が存在しない時、none を返します
  時間計算量 O(Bitlength)
 
 -rquantile (size_type first, size_type last, size_type k = 0,
-           value_type upper = none)->value_type
- [first, last) で upper 未満の値のうち k 番目 (0-indexed) に小さい値を返します
- upper = none のとき、対象は [first, last) の全ての値となります
+            value_type lower = none)->value_type
+ [first, last) で lower 以上の値のうち k 番目 (0-indexed) に小さい値を返します
+ lower = none のとき、対象は [first, last) の全ての値となります
  該当する値が存在しない時、none を返します
  時間計算量 O(Bitlength)
 
