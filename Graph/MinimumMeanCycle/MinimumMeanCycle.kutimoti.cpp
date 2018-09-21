@@ -1,3 +1,10 @@
+/*
+ * Minimum Mean Cycle
+ * 
+ * https://kutimoti.github.io/library/MinimumMeanCycle.html
+ * 
+ */
+
 #include <vector>
 #include <tuple>
 #include <utility>
