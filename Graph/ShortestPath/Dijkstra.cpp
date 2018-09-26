@@ -63,3 +63,33 @@ public:
     return this->delta_p(v);
   }
 };
+
+#include <set>
+#include <queue>
+#include <functional>
+
+template<class dist_type,class id_type>
+std::vector<dist_type> dijkstra(const Graph<id_type>& g,std::function<dist_type(id_type)> cost,size_t s,dist_type init,dist_type INF){
+    using vt = typename Graph<id_type>::vertex_type;
+    using P = std::pair<dist_type,vt>;
+    std::vector<dist_type> dist(g.V().size(),INF);
+    dist[s] = init;
+
+    std::priority_queue<P,std::vector<P>,std::greater<P>> que;
+
+    que.push({dist[s],s});
+
+    while(!que.empty()){
+      vt v = que.top().second;
+      dist_type d = que.top().first;
+      que.pop();
+      if(dist[v] < d) continue;
+      for(const auto & e : g.delta_p(v)){
+        if(dist[e.to] > dist[v] + cost(e.id)){
+          dist[e.to] = dist[v] + cost(e.id);
+          que.push({dist[e.to],e.to});
+        }
+      }
+    }
+    return dist;
+}
