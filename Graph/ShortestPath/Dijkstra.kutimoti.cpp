@@ -64,6 +64,12 @@ public:
   }
 };
 
+/* 
+ * Dijkstra
+ * 
+ * http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=3155448#1
+ */
+
 #include <set>
 #include <queue>
 #include <functional>
