@@ -14,7 +14,7 @@ struct normal_edge{
 
 template<class Info>
 class graph{
-private:
+protected:
   using edge_type = edge<Info>;
   ::std::size_t N;
   ::std::vector<::std::vector<edge_type>> edges;
@@ -39,8 +39,8 @@ class undirected_graph : public graph<Info>{
 public:
   undirected_graph(::std::size_t N) : graph<Info>(N){}
   void add_edge(int x, int y , Info info){
-    this->edges[x].push_back(this->edge_type(y , info));
-    this->edges[y].push_back(this->edge_type(x , info));
+    this->edges[x].push_back(edge<Info>(y , info));
+    this->edges[y].push_back(edge<Info>(x , info));
   }
 };
 
@@ -49,6 +49,18 @@ class directed_graph : public graph<Info>{
 public:
   directed_graph(::std::size_t N) : graph<Info>(N){}
   void add_edge(int x, int y , Info info){
-    this->edges[x].push_back(this->edge_type(y , info));
+    this->edges[x].push_back(edge<Info>(y , info));
+  }
+};
+
+template<class Info>
+class bipartite_graph : public undirected_graph<Info>{
+  ::std::size_t A;
+  ::std::size_t B;
+public:
+  bipartite_graph(::std::size_t A_ , ::std::size_t B_) : A(A_) , B(B_) , undirected_graph<Info>(A_ + B_) {
+  }
+  void add_edge(int x , int y , Info info){
+    undirected_graph<Info>::add_edge(x , y + A , info);
   }
 };
