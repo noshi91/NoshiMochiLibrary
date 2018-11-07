@@ -55,7 +55,7 @@ struct labeled_edge{
 };
 
 template<class Info>
-::std::vector<::std::pair<int,int>> garbow_edmonds(const undirected_graph<Info>& gra){
+::std::vector<::std::pair<int,int>> gabow_edmonds(const undirected_graph<Info>& gra){
   int N = gra.size();
   undirected_graph<labeled_edge> g(N + 1);
   ::std::vector<::std::pair<int,int>> edges;
@@ -172,7 +172,7 @@ template<class Info>
 }
 
 /*
- * kutimoti/nim-algorithm-libraryのC++移植です.詳しくはhttps://kutimoti.github.io/library/GarbowsEdmonds.htmlをどうぞ
+ * kutimoti/nim-algorithm-libraryのC++移植です.詳しくはhttps://kutimoti.github.io/library/GabowsEdmonds.htmlをどうぞ
  */
 
 //verify https://soundhound2018.contest.atcoder.jp/submissions/3555429
@@ -208,5 +208,5 @@ int main(){
     }
   }
 
-  cout << cnt - (int)garbow_edmonds(g).size() << endl;
+  cout << cnt - (int)gabow_edmonds(g).size() << endl;
 }
