@@ -17,7 +17,7 @@ public:
 private:
   class bitvector {
     using bitfield = ::std::uint_least64_t;
-    static constexpr ::std::size_t wardsize = 64;
+    static constexpr ::std::size_t wordsize = 64;
     static ::std::size_t popcount(bitfield c) {
 #ifdef __has_builtin
       return __builtin_popcountll(c);
@@ -37,10 +37,10 @@ private:
     value_type bit;
     constexpr bitvector() : dic(), cnt(0), bit(0) {}
     bitvector(const size_type size, const value_type b)
-        : dic(size / wardsize + 1, {0, 0}), cnt(0), bit(b) {}
+        : dic(size / wordsize + 1, {0, 0}), cnt(0), bit(b) {}
     void set(const size_type index) {
-      dic[index / wardsize].first |= static_cast<bitfield>(1)
-                                     << (index % wardsize);
+      dic[index / wordsize].first |= static_cast<bitfield>(1)
+                                     << (index % wordsize);
     }
     void build() {
       const size_type len = dic.size();
@@ -48,12 +48,12 @@ private:
         dic[i].second = dic[i - 1].second + popcount(dic[i - 1].first);
     }
     size_type rank(const size_type last) const {
-      return dic[last / wardsize].second +
-             popcount(dic[last / wardsize].first &
-                      (static_cast<bitfield>(1) << (last % wardsize)) - 1);
+      return dic[last / wordsize].second +
+             popcount(dic[last / wordsize].first &
+                      (static_cast<bitfield>(1) << (last % wordsize)) - 1);
     }
     bool access(const size_type index) const {
-      return dic[index / wardsize].first >> (index % wardsize) & 1;
+      return dic[index / wordsize].first >> (index % wordsize) & 1;
     }
   };
   static bool valid(const value_type value) {
@@ -188,8 +188,8 @@ public:
 
 /*
 
-verify:http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=3122145#1
-      :https://beta.atcoder.jp/contests/abc091/submissions/3142824
+verify:http://judge.u-aizu.ac.jp/onlinejudge/review.jsp?rid=3377460#1
+      :https://atcoder.jp/contests/abc091/submissions/4224626
 
 template<class Integral, ::std::size_t Bitlength, Integral None>
 class wavelet_matrix;
